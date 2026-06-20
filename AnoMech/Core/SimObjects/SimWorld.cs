@@ -60,12 +60,17 @@ public sealed class SimWorld : ISimObject, IDisposable
     // Passable tether: target is fixed, source migrates each tick to whichever
     // alive party member stands on the beam between current source and target.
     // The half-width of the beam corridor is 0.5f (~1 yalm). Candidates who
-    // already host this tether id at slot 0 are skipped — naturally
-    // coordinating parallel passable tethers of the same id without an
-    // external shared set.
-    public SimTether TetherPassable(SimCharacter? source, SimEnemy? target, ushort tetherId, float duration = 0f, ushort debuffStatusId = 0)
+    // already hold maxPerPlayer tethers of this id are skipped — naturally
+    // coordinating parallel passable tethers of the same id without an external
+    // shared set. maxPerPlayer caps how many of these beams may collapse onto a
+    // single player (default 1 = each player holds at most one of this id; raise
+    // it to allow stacking). The cap counts by logical tether SOURCE, not the
+    // player's slot-0 VFX, so it holds even when the beam is reverse-hosted on
+    // the target (SimTether.SetReverseVisual — e.g. P3Eq black holes).
+    public SimTether TetherPassable(SimCharacter? source, SimEnemy? target, ushort tetherId, float duration = 0f, ushort debuffStatusId = 0, int maxPerPlayer = 1)
     {
         SimCharacter? currentSource = source;
+        SimTether? self = null;
         Func<SimCharacter?> sourceResolver = () =>
         {
             if (currentSource is not { } cs || !cs.IsAlive()) return currentSource;
@@ -83,7 +88,7 @@ public sealed class SimWorld : ISimObject, IDisposable
             foreach (var c in candidates)
             {
                 if (ReferenceEquals(c, cs)) continue;
-                if (c.HasTetherInSlot0(tetherId)) continue;
+                if (CountPassableHolders(c, tetherId, self) >= maxPerPlayer) continue;
                 var ddx = c.Position.X - srcPos.X;
                 var ddz = c.Position.Z - srcPos.Z;
                 var d = ddx * ddx + ddz * ddz;
@@ -93,8 +98,24 @@ public sealed class SimWorld : ISimObject, IDisposable
             return currentSource;
         };
         var tether = new SimTether(sourceResolver, () => target, tetherId, debuffStatusId, duration);
+        self = tether;
         children.Add(tether);
         return tether;
+    }
+
+    // Counts active tethers of `tetherId` whose current source is `c`, excluding
+    // `self`. Replaces the old slot-0 VFX probe (SimCharacter.HasTetherInSlot0)
+    // so passable-tether coordination is independent of which end hosts the VFX —
+    // required for reverse-hosted beams, where the source no longer occupies the
+    // player's slot 0 and the slot probe would always read empty.
+    private int CountPassableHolders(SimCharacter c, ushort tetherId, SimTether? self)
+    {
+        var n = 0;
+        foreach (var child in children)
+            if (child is SimTether t && t.IsActive && !ReferenceEquals(t, self)
+                && t.TetherId == tetherId && ReferenceEquals(t.A, c))
+                n++;
+        return n;
     }
     
     public SimTether Tether(SimCharacter? a, Func<SimCharacter?> b, ushort tetherId, float duration = 0f, ushort debuffStatusId = 0)

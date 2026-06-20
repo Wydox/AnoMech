@@ -36,6 +36,20 @@ public sealed unsafe class SimTether : ISimObject
     private ConditionalStatus? conditionalStatus;
     private bool autoFaceTarget;
 
+    // ── FORK-LOCAL ENGINE ADDITION — NOT upstream (anomek/AnoMech). Flag explicitly if ever
+    //    committed; per the working agreement this Core/ change must not ride along with a
+    //    scenario-only PR. ──────────────────────────────────────────────────────────────────
+    // By default the tether VFX is hosted on the SOURCE end, so the beam emanates from the
+    // source. reverseVisual hosts it on the TARGET end instead (beam emanates from the target),
+    // for mechanics where the fixed target is the visual originator — e.g. UMAD P3Eq black holes,
+    // where TetherPassable makes the migrating player the source but the beam should come from the
+    // hole. Coordination is unaffected: SimWorld.TetherPassable now caps holders by logical tether
+    // SOURCE (CountPassableHolders), not the player's slot-0 VFX, so reverse-hosted parallel
+    // tethers still honor the per-player cap even though the source no longer occupies slot 0.
+    private bool reverseVisual;
+    private SimCharacter? VfxHost => reverseVisual ? currentTarget : currentSource;
+    private SimCharacter? VfxPointAt => reverseVisual ? currentSource : currentTarget;
+
     public ushort TetherId { get; }
 
     public SimCharacter? A => currentSource;
@@ -158,8 +172,8 @@ public sealed unsafe class SimTether : ISimObject
 
     private void CreateVfx()
     {
-        if (currentSource != null && currentTarget != null)
-            VfxFunctions.SetTether((Character*)currentSource.BattleCharaPtr, Slot, TetherId, currentTarget.GameObjectId, 1);
+        if (VfxHost is { } host && VfxPointAt is { } pointAt)
+            VfxFunctions.SetTether((Character*)host.BattleCharaPtr, Slot, TetherId, pointAt.GameObjectId, 1);
     }
 
     // Sentinel-checked clear: only wipe a slot we still own. A chained tether
@@ -167,11 +181,23 @@ public sealed unsafe class SimTether : ISimObject
     // overwritten Vfx.Tethers[slot].Id; we leave that alone.
     private void ClearTetherVfxIfOwned()
     {
-        if (currentSource != null)
+        if (VfxHost is { } host)
         {
-            var ca = (Character*)currentSource.BattleCharaPtr;
+            var ca = (Character*)host.BattleCharaPtr;
             if (VfxFunctions.GetTetherId(ca, Slot) == TetherId) VfxFunctions.ClearTether(ca, Slot);
         }
+    }
+
+    // FORK-LOCAL ENGINE ADDITION (see reverseVisual field). Flip which end hosts the tether VFX
+    // so the beam emanates from the target instead of the source. Safe to call right after
+    // construction: clears the slot on the old host, then re-hosts on the new end.
+    public SimTether SetReverseVisual(bool value = true)
+    {
+        if (reverseVisual == value) return this;
+        ClearTetherVfxIfOwned();
+        reverseVisual = value;
+        CreateVfx();
+        return this;
     }
 
     public SimTether SetConditionalStatus(ushort statusId, Predicate<SimTether> predicate)
