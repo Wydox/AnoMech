@@ -1,8 +1,10 @@
 .vs/
 obj/
-/logs/
+logs/
+notes/
 /Reference/
 bin/
+release/
 .idea/
 .claude/
 FFXIV-RaidsRewritten-Reference.md

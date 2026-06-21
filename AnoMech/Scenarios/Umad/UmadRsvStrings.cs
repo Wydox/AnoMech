@@ -5,16 +5,29 @@ namespace AnoMech.Scenarios.Umad;
 // RSV (Resolved String Value) name table for UMAD/Kefka content. The game stores
 // these action/status names as "_rsv_<id>_..." placeholders in the Excel sheets;
 // the real text is normally delivered by the server only inside the duty. AnoMech
-// runs inn-only, so we seed them ourselves at scenario start (see RsvFunctions and
-// memory reference_rsv_action_names). Without this, casts like "Kefka Says" render
-// with a blank name on the cast bar.
+// runs inn-only, so we seed them ourselves at scenario start (see RsvFunctions).
+// Without this, casts like "Kefka Says" render with a blank name on the cast bar.
 //
-// Captured from the type-262 RSVData lines in logs/UMAD/. Every key fits the strict
+// Captured from the type-262 RSVData lines seen in-duty. Every key fits the strict
 // template below; each id carries two variants (_0_ / _1_) that always resolve to
 // the same string, so we store one row per id and synthesize both keys at seed time.
 public static class UmadRsvStrings
 {
     private const string KeyFormat = "_rsv_{0}_-1_1_0_{1}_SE2DC5B04_EE2DC5B04";
+
+    // Status names live in a different RSV namespace than actions — the Status sheet's hash suffix
+    // (S74CFC3B0) instead of the Action sheet's (SE2DC5B04). Same two-variant rule. Captured from the
+    // same type-262 RSVData lines seen in-duty.
+    private const string StatusKeyFormat = "_rsv_{0}_-1_1_0_{1}_S74CFC3B0_E74CFC3B0";
+
+    // Decimal status id -> resolved name. The UMAD P3 Earthquake "unmaking" debuffs are RSV-only in
+    // the sheet, so without this they render as raw "_rsv_5452_…" on the status tooltip.
+    private static readonly (uint Id, string Name)[] StatusNames =
+    [
+        (5452, "Unbecoming"),
+        (5453, "Meanest Existence"),
+        (5454, "Primordial Crust"),
+    ];
 
     // Decimal action/status id -> resolved name (118 rows).
     private static readonly (uint Id, string Name)[] Names =
@@ -147,6 +160,11 @@ public static class UmadRsvStrings
         {
             RsvFunctions.Add(string.Format(KeyFormat, id, 0), name);
             RsvFunctions.Add(string.Format(KeyFormat, id, 1), name);
+        }
+        foreach (var (id, name) in StatusNames)
+        {
+            RsvFunctions.Add(string.Format(StatusKeyFormat, id, 0), name);
+            RsvFunctions.Add(string.Format(StatusKeyFormat, id, 1), name);
         }
     }
 }

@@ -60,6 +60,11 @@ public sealed class Game : IDisposable
         Scenarios = new IScenario[]
         {
             new UmadP2ForsakenScenario(),
+#if DEBUG
+            // WIP — dev builds only; stripped from Release so it never appears
+            // in the released plugin's scenario list.
+            new AnoMech.Scenarios.Umad.P3Eq.UmadP3EqScenario(),
+#endif
             new UmadP4KefkaSaysScenario(),
             new TopP2PartySynergyScenario(),
             new TopP5DeltaScenario(),
